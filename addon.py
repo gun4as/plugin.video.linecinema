@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import urllib, urllib2, re, sys
+import urllib, urllib2, re, sys, requests
 import xbmcplugin, xbmcgui
 
 def getHTML(url, data = False):
@@ -14,6 +14,14 @@ def getHTML(url, data = False):
     conn.close()
     
     return html
+    
+def postHTML(url, post_fields):
+    headers = {'User-Agent':'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-GB; rv:1.9.0.3) Gecko/2008092417 Firefox/3.0.3', 'Content-Type':'application/x-www-form-urlencoded'}
+    data = urllib.urlencode(post_fields)
+    req = urllib2.Request(url, data)
+    response = urllib2.urlopen(req)
+    html = response.read()
+    return html
 
 def showkeyboard(txtMessage="",txtHeader="",passwordField=False):
     if txtMessage=='None': txtMessage=''
@@ -26,9 +34,10 @@ def showkeyboard(txtMessage="",txtHeader="",passwordField=False):
 
 def Search():
     text = showkeyboard('', 'Поиск по названию')
-    url = 'http://linecinema.org/'
-    data =  {'do': 'search', 'subaction': 'search', 'story' : text.decode('utf-8').encode('windows-1251')}
-    html = getHTML(url, data)
+    url = 'http://www.linecinema.org/index.php?do=search'
+    data =  {'do': 'search', 'subaction': 'search', 'story' : text}
+    html = postHTML(url, data)
+    print "HTML Ret: ", html.decode('windows-1251').encode('utf-8')
     movie_links = re.compile('<h1>\s*<a href="(.+?)">(.+?)<\/a>\s*<\/h1>').findall(html.decode('windows-1251').encode('utf-8'))
     pictures_link = re.compile('<img\ssrc="http\:\/\/www.linecinema.org([^"]+)"\swidth="180">').findall(html.decode('windows-1251').encode('utf-8'))
     for i in range(0, len(movie_links)):
@@ -68,8 +77,28 @@ def Videos(url, title, picture):
     html = getHTML(url)
     link = re.compile('file:[\s\t]*"(.+?)"').findall(html.decode('windows-1251').encode('utf-8'))[0]
 
-    addLink(title, link, picture)
+    #addLink(title, link, picture)
+    addSysLink(title, link, 40, None)
 
+def PlayVideo(url, title):
+    fileResStr = url.partition('[')[-1].rpartition(']')[0]
+    fileRes = fileResStr.split(',')
+    fileRes = [x for x in fileRes if x]
+
+    print fileRes
+    
+    
+    options = ['480p', '320p']
+    dialog = xbmcgui.Dialog()
+    selection = dialog.select("выбрать разрешение:",fileRes)
+    wid = xbmcgui.getCurrentWindowId()
+    print "SELECTION: ", selection, wid
+    
+    if selection == -1:
+        return False
+    elif selection >= 0:
+        file = url.replace('['+fileResStr+']', fileRes[selection])
+        xbmc.Player().play(file)
 
 def get_params():
     param=[]
@@ -99,6 +128,17 @@ def addLink(title, url, picture):
 
     xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]), url=url, listitem=item)
 
+def addSysLink(title, url, mode, picture):
+    if picture == None:
+        item = xbmcgui.ListItem(title, iconImage='DefaultFolder.png', thumbnailImage='')
+    else:
+        item = xbmcgui.ListItem(title, iconImage='DefaultFolder.png', thumbnailImage=picture)
+
+    sys_url = sys.argv[0] + '?title=' + urllib.quote_plus(title) + '&url=' + urllib.quote_plus(url) + '&mode=' + urllib.quote_plus(str(mode))
+    
+    item.setInfo( type='Video', infoLabels={'Title': title} )
+
+    xbmcplugin.addDirectoryItem(handle=int(sys.argv[1]), url=sys_url, listitem=item)
 
 def addDir(title, url, mode, picture, page=None):
     sys_url = sys.argv[0] + '?title=' + urllib.quote_plus(title) + '&url=' + urllib.quote_plus(url) + '&mode=' + urllib.quote_plus(str(mode))
@@ -150,5 +190,7 @@ elif mode == 30:
     Videos(url, title, picture)
 elif mode == 35:
     Search()
+elif mode == 40:
+    PlayVideo(url, title)
 
 xbmcplugin.endOfDirectory(int(sys.argv[1]))
